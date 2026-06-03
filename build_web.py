@@ -195,6 +195,36 @@ def render_page(res,news,asof,deviation,nav5_ret,nav5_series):
  </div>
 </div></body></html>"""
 
+
+import re as _re, urllib.parse as _up, urllib.request as _ur
+def fetch_news_query(query, when="2d", maxi=10):
+    u=f"https://news.google.com/rss/search?q={_up.quote(query)}+when:{when}&hl=en-US&gl=US&ceid=US:en"
+    try:
+        rq=_ur.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+        raw=_ur.urlopen(rq,timeout=15).read().decode("utf-8","ignore")
+    except Exception:
+        return []
+    out=[]
+    for it in _re.findall(r"<item>(.*?)</item>",raw,_re.S)[:maxi]:
+        m=_re.search(r"<title>(.*?)</title>",it,_re.S); l=_re.search(r"<link>(.*?)</link>",it,_re.S); sc=_re.search(r"<source[^>]*>(.*?)</source>",it,_re.S)
+        if not m: continue
+        out.append({"title":_re.sub(r"<.*?>","",m.group(1)).strip(),"link":(l.group(1).strip() if l else ""),"source":(_re.sub(r"<.*?>","",sc.group(1)).strip() if sc else "")})
+    return out
+
+def spacex_top(n_items=2):
+    items=fetch_news_query("SpaceX OR Starship OR Starlink", when="2d", maxi=12)
+    scored=[]; seen=set()
+    for n in items:
+        k=n["title"][:60]
+        if k in seen: continue
+        seen.add(k)
+        scored.append((t.score_news(n["title"],None)+1.5,"SpaceX",n))
+    scored.sort(key=lambda x:x[0],reverse=True)
+    top=scored[:n_items]
+    for _,tk,n in top:
+        n["title_ko"]=t.translate(n["title"]) or n["title"]
+    return top
+
 def main():
     cfg=t.load_config(); kor=cfg.get("ticker_korean",{})
     basket,src=t.fetch_basket(cfg); print(f"PDP 출처: {src} ({len(basket)}종목)")
@@ -216,7 +246,13 @@ def main():
     deviation=fetch_deviation()
     _,navs=nav_series(basket,df)
     nav5_ret=((navs[-1]/navs[0]-1)*100) if len(navs)>=2 else None
-    news=t.collect_top_news([{"ticker":r["ticker"],"name":r["name"],"pct":r["pct"]} for r in rows],top_n=6)
+    hold=t.collect_top_news([{"ticker":r["ticker"],"name":r["name"],"pct":r["pct"]} for r in rows],top_n=5)
+    sx=spacex_top(2)
+    _seen=set(); news=[]
+    for item in sx+hold:
+        k=item[2]["title"][:60]
+        if k in _seen: continue
+        _seen.add(k); news.append(item)
     html=render_page(res,news,asof,deviation,nav5_ret,navs)
     out=os.environ.get("OUT","site/index.html")
     os.makedirs(os.path.dirname(out) or ".",exist_ok=True)
