@@ -1,7 +1,7 @@
 name: tiger-space-pages
 on:
   schedule:
-    - cron: "0 22 * * 0-4"   # UTC 22:00 = KST 07:00 (월~금)
+    - cron: "0 19 * * 0-4"   # UTC 22:00 = KST 07:00 (월~금)
   workflow_dispatch: {}
 permissions:
   contents: read
